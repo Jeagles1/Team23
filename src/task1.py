@@ -10,23 +10,25 @@ class Circle:
         # When setting up the publisher, the "cmd_vel" topic needs to be specified
         # and the Twist message type needs to be provided
         self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-        rospy.init_node('move_circle', anonymous=True)
-        self.rate = rospy.Rate(10) # hz
+        rospy.init_node('task1', anonymous=True)
+        self.rate = rospy.Rate(1000) # hz
 
         self.sub = rospy.Subscriber("odom", Odometry, self.callback_function)
 
         self.odom_data = Odometry()
         self.vel_cmd = Twist()
-
+        self.pub.publish()
         self.angular_z = 0.0
         self.turn = 1
+        self.loops = 0
         self.lasttime = rospy.get_rostime()
-        self.lasttimeran = 0
-        self.lasttime.secs = 0
+        
+        self.lasttimeran = self.lasttime.secs
+        
         self.ctrl_c = False
         rospy.on_shutdown(self.shutdownhook)
 
-        rospy.loginfo("the 'move_circle' node is active...")
+        rospy.loginfo("the 'task 1' node is active...")
 
     def callback_function(self, odom_data):
         self.angular_z = odom_data.pose.pose.orientation.z
@@ -44,19 +46,17 @@ class Circle:
 
     def main_loop(self):
         
-        while not self.ctrl_c:
+        while not self.ctrl_c and self.loops<2:
             # specify the radius of the circle:
             path_rad = 0.5 # m
             # linear velocity must be below 0.26m/s:
             lin_vel = 0.1 # m/s
             self.lasttime = rospy.get_rostime()
-            print(self.angular_z)
-            print(self.lasttime.secs)
-            print(self.lasttimeran)
-            print(self.lasttime.secs-self.lasttimeran)
+            
             if self.angular_z > -0.05 and self.angular_z < 0.05 and (self.lasttime.secs-self.lasttimeran) > 5:
                 self.turn = self.turn*-1
                 self.lasttimeran = self.lasttime.secs
+                self.loops += 1
 
             self.vel_cmd.linear.x = lin_vel
             self.vel_cmd.angular.z = (lin_vel * self.turn) / path_rad # rad/s
