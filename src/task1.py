@@ -2,6 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 
 class Circle:
 
@@ -12,13 +13,24 @@ class Circle:
         rospy.init_node('move_circle', anonymous=True)
         self.rate = rospy.Rate(10) # hz
 
+        self.sub = rospy.Subscriber("odom", Odometry, self.callback_function)
+
+        self.odom_data = Odometry()
         self.vel_cmd = Twist()
 
+        self.angular_z = 0.0
+        self.turn = 1
+        self.lasttime = rospy.get_rostime()
+        self.lasttimeran = 0
+        self.lasttime.secs = 0
         self.ctrl_c = False
         rospy.on_shutdown(self.shutdownhook)
 
         rospy.loginfo("the 'move_circle' node is active...")
 
+    def callback_function(self, odom_data):
+        self.angular_z = odom_data.pose.pose.orientation.z
+            
     def shutdownhook(self):
         self.vel_cmd.linear.x = 0.0 # m/s
         self.vel_cmd.angular.z = 0.0 # rad/s
@@ -31,14 +43,23 @@ class Circle:
         self.ctrl_c = True
 
     def main_loop(self):
+        
         while not self.ctrl_c:
             # specify the radius of the circle:
             path_rad = 0.5 # m
             # linear velocity must be below 0.26m/s:
             lin_vel = 0.1 # m/s
+            self.lasttime = rospy.get_rostime()
+            print(self.angular_z)
+            print(self.lasttime.secs)
+            print(self.lasttimeran)
+            print(self.lasttime.secs-self.lasttimeran)
+            if self.angular_z > -0.05 and self.angular_z < 0.05 and (self.lasttime.secs-self.lasttimeran) > 5:
+                self.turn = self.turn*-1
+                self.lasttimeran = self.lasttime.secs
 
             self.vel_cmd.linear.x = lin_vel
-            self.vel_cmd.angular.z = lin_vel / path_rad # rad/s
+            self.vel_cmd.angular.z = (lin_vel * self.turn) / path_rad # rad/s
 
             self.pub.publish(self.vel_cmd)
             self.rate.sleep()
