@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
+import math
+from xml.etree.ElementTree import PI
 import rospy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from tf.transformations import euler_from_quaternion
 
 class Circle:
 
@@ -11,8 +14,10 @@ class Circle:
         # and the Twist message type needs to be provided
         self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
         rospy.init_node('task1', anonymous=True)
-        self.rate = rospy.Rate(1000) # hz
-
+        self.rate = rospy.Rate(1) # hz
+        self.yaw = 0
+        self.linear_x = 0
+        self.linear_y = 0
         self.sub = rospy.Subscriber("odom", Odometry, self.callback_function)
 
         self.odom_data = Odometry()
@@ -31,7 +36,17 @@ class Circle:
         rospy.loginfo("the 'task 1' node is active...")
 
     def callback_function(self, odom_data):
+        
         self.angular_z = odom_data.pose.pose.orientation.z
+
+        angular_x = odom_data.pose.pose.orientation.x
+        angular_y = odom_data.pose.pose.orientation.y
+        angular_w = odom_data.pose.pose.orientation.w
+        self.linear_x = odom_data.pose.pose.position.x
+        self.linear_y = odom_data.pose.pose.position.y
+        (roll, pitch, self.yaw) = euler_from_quaternion([angular_x, angular_y,self.angular_z, angular_w], "sxyz")
+        self.yaw = self.yaw/(2*math.pi) *360
+       
             
     def shutdownhook(self):
         self.vel_cmd.linear.x = 0.0 # m/s
@@ -53,11 +68,19 @@ class Circle:
             lin_vel = 0.1 # m/s
             self.lasttime = rospy.get_rostime()
             
+           
             if self.angular_z > -0.05 and self.angular_z < 0.05 and (self.lasttime.secs-self.lasttimeran) > 5:
                 self.turn = self.turn*-1
                 self.lasttimeran = self.lasttime.secs
                 self.loops += 1
 
+
+            if (self.yaw>=0):
+                print("x= {:.2f} m,  y= {:.2f} m, yaw= {:.2f} degrees.".format(self.linear_x,self.linear_y,self.yaw))
+            else:
+                print("x= {:.2f} m,  y= {:.2f} m, yaw= {:.2f} degrees.".format(self.linear_x,self.linear_y,(360+self.yaw)))
+
+            
             self.vel_cmd.linear.x = lin_vel
             self.vel_cmd.angular.z = (lin_vel * self.turn) / path_rad # rad/s
 
