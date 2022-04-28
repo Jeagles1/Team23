@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="team23" type="task2_server.py" name="task2_server" output="screen"></node>
+    <node pkg="team23" type="task2_client.py" name="task2_client" output="screen"></node>
+</launch>
