@@ -1,10 +1,7 @@
 #! /usr/bin/python3
-
-'''
-Author: team23
-File: task2_client.py
-'''
-
+"""
+   Autor:team23
+"""
 import rospy
 import actionlib
 import numpy as np
@@ -19,12 +16,10 @@ from com2009_msgs.msg import SearchAction,SearchGoal,SearchFeedback
 
 class client:
 
-    ranges               = None
+    ranges  = None
     closest_object_angle = None
 
-    """
-    Init function
-    """
+   #Init function
     def __init__(self):
         self.publisher = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.vel_cmd   = Twist()
@@ -40,7 +35,7 @@ class client:
         self.rate = rospy.Rate(5)
         self.goal = SearchGoal()
 
-        self.client          = actionlib.SimpleActionClient('/search_action_server', SearchAction)
+        self.client = actionlib.SimpleActionClient('/search_action_server', SearchAction)
         self.client.wait_for_server()
         self.scan_subscriber = rospy.Subscriber('/scan', LaserScan, self.scan_callback) # Creat subscriber for laser data
 
@@ -58,29 +53,22 @@ class client:
     def stop_move(self):
         self.set_cmd_vel()
         self.publish()
+   
+    #Callback function for laser data received
+    def scan_callback(self, data):
+        self.ranges =data.ranges
 
-    """
-    Callback function for laser data received
-    """
-    def scan_callback(self, scan_data):
-        self.ranges = scan_data.ranges
-
-    """
-    Send Function for goal sending to action server
-    """
+    
+    #Send Function for goal sending to action server 
     def send_goal(self, distance, velocity):
-        self.goal.fwd_velocity                       = velocity
-        self.goal.approach_distance                  = distance
+        self.goal.fwd_velocity = velocity
+        self.goal.approach_distance = distance
         self.client.send_goal(self.goal, feedback_cb = self.feedback_callback) # Send goal
 
-    """
-    Callback function for any feedbacks from action server
-    """
+    
+    #Callback function for any feedbacks from action server
     def feedback_callback(self, feedback_data):
-
-        '''
-        Avoid going too far and wasting time
-        '''
+        #Avoid going too far and wasting time
         if feedback_data.current_distance_travelled >= 2:
             self.client.cancel_goal()
             print("Current moving stoped")
@@ -99,17 +87,15 @@ class client:
         self.posy = self.round_number(position.y, 4)
         self.yaw  = self.round_number(degrees(yaw), 4)
 
-    """
-    Adjust direction to avoid being hit
-    """
+    
+    #Adjust direction to avoid being hit 
     def adjust_direction(self):
         thre_value            = 1.5
         left_degree_distance  = np.array(self.ranges[0:89])
         right_degree_distance = np.array(self.ranges[270:359])
 
-        '''
-        If condition for Determine which direction to turn to adjust
-        '''
+        
+        #If condition for Determine which direction to turn to adjust    
         if left_degree_distance.max() >= thre_value and right_degree_distance.max() >= thre_value:
             if self.closest_object_angle < 0:
                 turn_velocity = -0.40
@@ -126,9 +112,8 @@ class client:
         self.set_cmd_vel(0, turn_velocity)
         self.publish()
 
-        '''
-        If condition for determine when to stop adjusting
-        '''
+        
+        #If condition for determine when to stop adjusting 
         if turn_velocity < 0:
             while np.array(self.ranges[0:20]).min() <= thre_value:
                 continue
@@ -140,9 +125,8 @@ class client:
 
         self.stop_move()
 
-    """
-    Shutdown function
-    """
+    
+   #Shutdown function
     def shutdown(self):
         if not self.action_complete:
             rospy.logwarn("Received a shutdown request. Cancelling Goal...")
@@ -150,17 +134,13 @@ class client:
             self.stop_move()
             rospy.logwarn("Goal Cancelled")
 
-    """
-    Main function for robot control
-    """
+    
+    #Main function for robot control
     def main(self):
         while True:
             self.action_complete = False
             self.send_goal(distance = 0.5, velocity = 0.26)
-
-            '''
-            Do while loop when action has not been complete
-            '''
+            #Do while loop when action has not been complete
             while self.client.get_state() < 2:
                 self.rate.sleep()
 

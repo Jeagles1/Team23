@@ -1,11 +1,4 @@
 #! /usr/bin/python3
-
-'''
-Author: team23
-File: task2_server.py
-Time: 05/05/2022
-'''
-
 import os
 import rospy
 import actionlib
@@ -23,8 +16,8 @@ from com2009_msgs.msg import SearchFeedback,SearchResult,SearchAction
 class server(object):
 
     min_distance = None
-    feedback     = SearchFeedback()
-    result      = SearchResult()
+    feedback = SearchFeedback()
+    result = SearchResult()
 
     def __init__(self):
 
@@ -53,9 +46,7 @@ class server(object):
         self.set_cmd_vel()
         self.publish()
 
-    """
-    Callback function for laser data
-    """
+    #Callback function for laser data
     def scan_callback(self, scan_data):
         left_view   = scan_data.ranges[0:21]
         right_view  = scan_data.ranges[-20:]
@@ -78,12 +69,11 @@ class server(object):
         value = int(value * (10**precision))
         return float(value) / (10**precision)
 
-    """
-    Init function for this server
-    """
+    
+    #Init function for this server
     def server_launch(self, goal):
         complete  = True
-        velocity  = goal.fwd_velocity
+        velocity  = goal.fwd_vel
         distance  = goal.approach_distance
 
         if velocity <= 0 or velocity > 0.26:
@@ -101,19 +91,16 @@ class server(object):
         print("Request to move forwards at {}m/s, and to stop at {}m".format(velocity, distance))
 
         self.set_cmd_vel(velocity, 0) # set velocity
-
-        '''
-        Do while loop when min_distance has not been created
-        '''
+        
+        #Do while loop when min_distance has not been created
         while not self.min_distance:
             pass
 
         x_init = self.posx # Refresh the x position
         y_init = self.posy # Refresh the y position
 
-        '''
-        Do while loop when there are no obstacles around
-        '''
+        
+        #Do while loop when there are no obstacles around
         while self.min_distance >= (distance + 0.1):
             self.publish() # Keep moving forward
 
