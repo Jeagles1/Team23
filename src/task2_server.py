@@ -73,7 +73,7 @@ class server(object):
     #Init function for this server
     def server_launch(self, goal):
         complete  = True
-        velocity  = goal.fwd_vel
+        velocity  = goal.fwd_velocity
         distance  = goal.approach_distance
 
         if velocity <= 0 or velocity > 0.26:
