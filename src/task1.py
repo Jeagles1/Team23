@@ -14,12 +14,9 @@ class Circle:
         # and the Twist message type needs to be provided
         self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
         rospy.init_node('task1', anonymous=True)
-        self.rate = rospy.Rate(1) # hz
-        self.yaw = 0
-        self.linear_x = 0
-        self.linear_y = 0
+        self.rate = rospy.Rate(100) # hz
         self.sub = rospy.Subscriber("odom", Odometry, self.callback_function)
-
+        
         self.odom_data = Odometry()
         self.vel_cmd = Twist()
         self.pub.publish()
@@ -27,6 +24,16 @@ class Circle:
         self.turn = 1
         self.loops = 0
         self.lasttime = rospy.get_rostime()
+        
+        self.yaw = 0
+        self.linear_x = 0
+        self.linear_y = 0
+        
+        self.start_angular_z = self.odom_data.pose.pose.orientation.z
+   
+        
+
+        
         
         self.lasttimeran = self.lasttime.secs
         
@@ -44,7 +51,7 @@ class Circle:
         angular_w = odom_data.pose.pose.orientation.w
         self.linear_x = odom_data.pose.pose.position.x
         self.linear_y = odom_data.pose.pose.position.y
-        (roll, pitch, self.yaw) = euler_from_quaternion([angular_x, angular_y,self.angular_z, angular_w], "sxyz")
+        (roll, pitch, self.yaw) = euler_from_quaternion([angular_x, angular_y, self.angular_z,angular_w], "sxyz")
         self.yaw = self.yaw/(2*math.pi) *360
        
             
@@ -67,9 +74,10 @@ class Circle:
             # linear velocity must be below 0.26m/s:
             lin_vel = 0.1 # m/s
             self.lasttime = rospy.get_rostime()
-            
+            print(self.start_angular_z)
+            print(self.angular_z)
            
-            if self.angular_z > -0.05 and self.angular_z < 0.05 and (self.lasttime.secs-self.lasttimeran) > 5:
+            if (self.angular_z) > self.start_angular_z-0.05 and (self.angular_z) < self.start_angular_z+0.05 and (self.lasttime.secs-self.lasttimeran) > 5:
                 self.turn = self.turn*-1
                 self.lasttimeran = self.lasttime.secs
                 self.loops += 1
