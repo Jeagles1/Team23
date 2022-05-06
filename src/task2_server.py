@@ -54,7 +54,7 @@ class server(object):
         view_angles = np.arange(-20, 21)
         self.min_distance = front_view.min()
         self.object_angle = view_angles[np.argmin(front_view)]
-
+    
     def odom_convert(self, odom_data):
         orientation = odom_data.pose.pose.orientation
         position    = odom_data.pose.pose.position
@@ -64,7 +64,7 @@ class server(object):
         self.yaw  = self.round_number(degrees(yaw), 4)
         self.posx = self.round_number(position.x, 4)
         self.posy = self.round_number(position.y, 4)
-
+    
     def round_number(self, value, precision):
         value = int(value * (10**precision))
         return float(value) / (10**precision)

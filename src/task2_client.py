@@ -1,7 +1,5 @@
 #! /usr/bin/python3
-"""
-   Autor:team23
-"""
+
 import rospy
 import actionlib
 import numpy as np
@@ -76,7 +74,7 @@ class client:
     def round_number(self, value, precision):
         value = int(value * (10**precision))
         return float(value) / (10**precision)
-
+    
     def odom_convert(self, odom_data):
         orientation = odom_data.pose.pose.orientation
         position    = odom_data.pose.pose.position
@@ -86,17 +84,17 @@ class client:
         self.posx = self.round_number(position.x, 4)
         self.posy = self.round_number(position.y, 4)
         self.yaw  = self.round_number(degrees(yaw), 4)
-
+    
     
     #Adjust direction to avoid being hit 
     def adjust_direction(self):
-        thre_value            = 1.5
+        init_value            = 1.5
         left_degree_distance  = np.array(self.ranges[0:89])
         right_degree_distance = np.array(self.ranges[270:359])
 
         
         #If condition for Determine which direction to turn to adjust    
-        if left_degree_distance.max() >= thre_value and right_degree_distance.max() >= thre_value:
+        if left_degree_distance.max() >= init_value and right_degree_distance.max() >= init_value:
             if self.closest_object_angle < 0:
                 turn_velocity = -0.40
             else:
@@ -115,12 +113,12 @@ class client:
         
         #If condition for determine when to stop adjusting 
         if turn_velocity < 0:
-            while np.array(self.ranges[0:20]).min() <= thre_value:
+            while np.array(self.ranges[0:20]).min() <= init_value:
                 continue
 
         else:
 
-            while np.array(self.ranges[-21:]).min() <= thre_value:
+            while np.array(self.ranges[-21:]).min() <= init_value:
                 continue
 
         self.stop_move()
