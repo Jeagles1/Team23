@@ -22,14 +22,13 @@ class State(Enum):
 
 class task3:
 
-    '''
-    Init range value
-    '''
+    
+    #Init range value
     ranges = None
 
-    '''
-    Init function
-    '''
+    
+    #Init function
+    
     def __init__(self):
         rospy.init_node('task3')
         self.posx = 0.0
