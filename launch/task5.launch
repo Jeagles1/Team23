@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="team23" type="task5_server.py" name="task5_server" output="screen"></node>
+    <node pkg="team23" type="task5_client.py" name="task5_client" output="screen"></node>
+</launch>
