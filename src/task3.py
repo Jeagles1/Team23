@@ -1,210 +1,164 @@
 #!/usr/bin/env python3
-
 import rospy
+import numpy as np
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
-from math import sqrt, pow, pi
+from math import degrees
+from enum import Enum
+
 from sensor_msgs.msg import LaserScan
-import numpy as np
 
-class Maze:
-    def callback_function(self, odom_data):
-        # obtain the orientation and position co-ords:
-        or_x = odom_data.pose.pose.orientation.x
-        or_y = odom_data.pose.pose.orientation.y
-        or_z = odom_data.pose.pose.orientation.z
-        or_w = odom_data.pose.pose.orientation.w
-        pos_x = odom_data.pose.pose.position.x
-        pos_y = odom_data.pose.pose.position.y
 
-        # convert orientation co-ords to roll, pitch & yaw (theta_x, theta_y, theta_z):
-        (roll, pitch, yaw) = euler_from_quaternion([or_x, or_y, or_z, or_w], 'sxyz')
+class State(Enum):
+    
+    #Init States, left turning, right turning,left distance, right distance, strait wall, end
+    LT = 1
+    RT = 2
+    LD = 3
+    RD = 4
+    SW = 5
+    END = 6
+
+class task3:
+
+    '''
+    Init range value
+    '''
+    ranges = None
+
+    '''
+    Init function
+    '''
+    def __init__(self):
+        rospy.init_node('task3')
+        self.posx = 0.0
+        self.posy = 0.0
+        self.yaw  = 0.0
+
+        self.subscriber = rospy.Subscriber('/odom', Odometry, self.odom_convert)
+        self.publisher  = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+        self.vel_cmd    = Twist()
+
+
+        self.rate            = rospy.Rate(10)
+        self.scan_subscriber = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
+
+        rospy.on_shutdown(self.shutdown_ops)
+        self.main()
+
+    
+    #Function to round number
+    def round(self, value, precision):
+        value = int(value * (10**precision))
+
+        return float(value) / (10**precision)
+
+    
+   # Function for moving speed setting
+    def move_speed_setting(self, linear = 0.0, angular = 0.0):
+        self.vel_cmd.linear.x  = linear
+        self.vel_cmd.angular.z = angular
+
+
+    #Function for data publishing
+    def publish(self):
+        self.publisher.publish(self.vel_cmd)
+
+    
+    #the Function of state calculation
+    def state_cal(self, r):
+        forward  = r[0]
+        left  = r[90]
+        right  = r[-90]
+        backward  = r[180]
+        front_right = r[-55]
+        front_left = r[55]
+
+        alpha           = 0.4
+        side_threshold  = 0.7
+        front_threshold = 0.6
+        back_threshold  = 0.8
+
+        r_prime    = np.array(r)
+        close_count = float(np.count_nonzero(r_prime<=back_threshold)) / 360.0 * 100.0
+
+        if (close_count > 75 and forward <= front_threshold and front_right <= alpha * 1.5):
+            return State.END
+        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.END
+        elif (forward <= front_threshold and backward <= back_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.END
+        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.LD
+        elif (right <= side_threshold and front_right >= alpha * 1.5):
+            return State.RD
+
         
-        self.x = pos_x
-        self.y = pos_y
-        self.theta_z = yaw 
 
-        if self.startup:
-            self.startup = False
-            self.x0 = self.x
-            self.y0 = self.y
-            self.theta_z0 = self.theta_z
+        elif (right >= side_threshold and front_right >= alpha * 1.5):
+            return State.RT
+
+        elif (forward <= front_threshold and left >= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.LT
+
+        else:
+            return State.SW
+
+    #Function of convert data
+    def odom_convert(self, odom_data):
+        orientation = odom_data.pose.pose.orientation
+        position    = odom_data.pose.pose.position
+        (_, _, yaw) = euler_from_quaternion([orientation.x,
+            orientation.y, orientation.z, orientation.w],'sxyz')
+
+        self.yaw  = self.round(degrees(yaw), 4)
+        self.posx = self.round(position.x, 4)
+        self.posy = self.round(position.y, 4)
+
+    def stop(self):
+        self.move_speed_setting()
+        self.publish()
 
     def scan_callback(self, scan_data):
-        """
-        left_arc = scan_data.ranges[0:21]
-        right_arc = scan_data.ranges[-20:]
-        front_arc = np.array(left_arc[::-1] + right_arc[::-1])
-        self.min_distance = front_arc.min()
-        self.object_angle = self.arc_angles[np.argmin(front_arc)]
-        """
-        self.left_distance = scan_data.ranges[90]
-        self.right_distance = scan_data.ranges[270]
-        self.front_distance = scan_data.ranges[0]
-        self.backright_distance = scan_data.ranges[225]
-        self.backleft_distance = scan_data.ranges[135]
+        self.ranges = scan_data.ranges
 
-    def __init__(self):
-        node_name = "maze_nav"
-        
-        self.startup = True
-        self.leftturn = False
-        self.rightturn = False
-        self.fullturn = False
-        self.minorleft = False
-        self.minorright = False
-
-        self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-        self.sub = rospy.Subscriber('scan', LaserScan, self.scan_callback)
-        self.sub2 = rospy.Subscriber('odom', Odometry, self.callback_function)
-
-        rospy.init_node(node_name, anonymous=True)
-        self.rate = rospy.Rate(10) # hz
-
-        self.x = 0.0
-        self.y = 0.0
-        self.theta_z = 0.0
-        self.x0 = 0.0
-        self.y0 = 0.0
-        self.theta_z0 = 0.0
-
-        self.left_distance = 0.0
-        self.right_distance = 0.0
-        self.front_distance = 0.0
-        self.backleft_distance = 0.0
-        self.backright_distance = 0.0
-        
-        self.vel = Twist()
-
-        self.ctrl_c = False
-        rospy.on_shutdown(self.shutdownhook)
-
-        rospy.loginfo(f"the {node_name} node has been initialised...")
-
-    def shutdownhook(self):
-        self.pub.publish(Twist())
-        self.ctrl_c = True
     
-    def print_stuff(self, a_message):
-        print(a_message)
-        #print(f"current velocity: lin.x = {self.vel.linear.x:.1f}, ang.z = {self.vel.angular.z:.1f}")
-        #print(f"current odometry: x = {self.x:.3f}, y = {self.y:.3f}, theta_z = {self.theta_z:.3f}")
-        print(f"current scan: left = {self.left_distance:.3f}, front = {self.front_distance:.3f}, right = {self.right_distance:.3f}")
+    #Shutdown function
+    def shutdown_ops(self):
+        rospy.logwarn("Received a shutdown request.")
+        self.stop()
 
-    def main_loop(self):
-        status = ""
-        wait = 0
-        while not self.ctrl_c:
-            if self.startup:
-                self.vel = Twist()
-                status = "init"
-            elif self.leftturn:
-                print("turning left")
-                self.vel.linear.x = 0
-                if (self.backright_distance < 0.2):
-                    self.vel.linear.x = 0.1
-                self.lastx = self.x
-                self.lasty = self.y
-                if abs(self.theta_z0 - self.theta_z) >= pi/2:
-                    self.vel.angular.z = 0
-                    self.leftturn = False
-                else:
-                    self.vel.angular.z = 0.4
-            elif self.rightturn:
-                print("turning right")
-                self.vel.linear.x = 0
-                if (self.backleft_distance < 0.2):
-                    self.vel.linear.x = 0.1
-                self.lastx = self.x
-                self.lasty = self.y
-                if abs(self.theta_z0 - self.theta_z) >= pi/2:
-                    self.vel.angular.z = 0
-                    self.rightturn = False
-                else:
-                    self.vel.angular.z = -0.4
-            elif self.minorleft: #TODO: minorleft and minorright should be based on forward left and right angles on their distance, not for second option
-                print("minorleft")
-                self.vel.linear.x = 0.03
-                if (self.backright_distance < 0.2):
-                    self.vel.linear.x = 0.07
-                if abs(self.theta_z0 - self.theta_z) >= pi/10:
-                    self.vel.angular.z = 0
-                    self.minorleft = False
-                else:
-                    self.vel.angular.z = 0.2
-            elif self.minorright:
-                print("minorright")
-                self.vel.linear.x = 0.03
-                if (self.backleft_distance < 0.2):
-                    self.vel.linear.x = 0.07
-                if abs(self.theta_z0 - self.theta_z) >= pi/10:
-                    self.vel.angular.z = 0
-                    self.minorright = False
-                else:
-                    self.vel.angular.z = -0.2
-            elif self.front_distance < 0.4:
-                print("end, need to turn")
-                self.theta_z0 = self.theta_z
-                if self.left_distance > 0.5:
-                    self.leftturn = True
-                elif self.right_distance > 0.5:
-                    self.rightturn = True
-                else:
-                    # to do a full turn, do two right turns
-                    self.rightturn = True
-            elif self.left_distance > 0.5 and self.front_distance > 1 and (abs(self.lastx - self.x) > 0.3 or abs(self.lasty - self.y) > 0.3):
-                print("can make left here")
-                print(wait)
-                if wait >= 10:
-                    self.theta_z0 = self.theta_z
-                    self.leftturn = True
-                    wait = 0
-                else:
-                    wait += 1
-            elif (self.left_distance < 0.4 and self.right_distance < 0.4 and self.right_distance - self.left_distance > 0.5) or self.right_distance < 0.2:
-                self.theta_z0 = self.theta_z
-                self.minorleft = True
-            elif (self.left_distance < 0.4 and self.right_distance < 0.4 and self.left_distance - self.right_distance > 0.5) or self.left_distance < 0.2:
-                self.theta_z0 = self.theta_z
-                self.minorright = True
+    
+    #Main loop function
+    def main(self):
+        while not (self.ranges):
+            self.rate.sleep()
+        while True:
+            state = self.state_cal(self.ranges)
+            if (state == State.SW):
+                front_right = self.ranges[-55]
+                e  = 0.4 - front_right
+                kp = 3
+                self.move_speed_setting(0.25, kp * e)
+
+            elif (state == State.RD or state == State.RT):
+                self.move_speed_setting(0.25, -0.9)
+
+            elif (state == State.LD or state == State.LT):
+                self.move_speed_setting(0.25, 1.5)
+
+            elif (state == State.END):
+                self.move_speed_setting(0, 1.5)
+
             else:
-                print("forward")
-                self.vel.linear.x = 0.1
-            """
-            elif self.turn:
-                if abs(self.theta_z0 - self.theta_z) >= pi/2 and wait > 5:
-                    # If the robot has turned 90 degrees (in radians) then stop turning
-                    self.turn = False
-                    self.vel = Twist()
-                    self.theta_z0 = self.theta_z
-                    status = "turn-fwd transition"
-                    wait = 0
-                else:
-                    self.vel = Twist()
-                    self.vel.angular.z = 0.2
-                    status = "turning"
-                    wait += 1
-            else:
-                if sqrt(pow(self.x0 - self.x, 2) + pow(self.y0 - self.y, 2)) >= 0.5:
-                    # if distance travelled is greater than 0.5m then stop, and start turning:
-                    self.vel = Twist()
-                    self.turn = True
-                    self.x0 = self.x
-                    self.y0 = self.y
-                    status = "fwd-turn transition"
-                else:
-                    self.vel = Twist()
-                    self.vel.linear.x = 0.1
-                    status = "moving forwards"
-            """
-            self.pub.publish(self.vel)
-            self.print_stuff(status)
+                self.move_speed_setting(0, 0)
+
+            self.publish()
             self.rate.sleep()
 
 if __name__ == '__main__':
-    navmaze_instance = Maze()
     try:
-        navmaze_instance.main_loop()
+        task3()
     except rospy.ROSInterruptException:
         pass
