@@ -6,6 +6,7 @@ from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 from math import degrees
 from enum import Enum
+from random import randint
 
 from sensor_msgs.msg import LaserScan
 
@@ -126,7 +127,7 @@ class task3:
     
    # Function for moving speed setting
     def move_speed_setting(self, linear = 0.0, angular = 0.0):
-        self.vel_cmd.linear.x  = linear * (2 / 3)
+        self.vel_cmd.linear.x  = linear * (3 / 4)
         self.vel_cmd.angular.z = angular * (1 / 3)
 
 
@@ -137,16 +138,19 @@ class task3:
     
     #the Function of state calculation
     def state_cal(self, r):
-        forward  = r[0]
+        #forward  = r[0]
+        forward = np.amin(np.append(np.array(r[0:30]),np.array(r[330:360])))
         left  =  np.amin(np.array(r[85:95]))
         right  = np.amin(np.array(r[265:275]))
         backward  = np.amin(np.array(r[175:185]))
-        front_right = np.amin(np.array(r[300:310]))
-        front_left = np.amin(np.array(r[45:65]))
+        back_left = np.amin(np.array(r[125:145]))
+        back_right = np.amin(np.array(r[215:235]))
+        front_right = np.amin(np.array(r[295:335]))
+        front_left = np.amin(np.array(r[25:65]))
 
-        alpha           = 1
-        side_threshold  = 0.2
-        front_threshold = 1.5
+        alpha           = 0.4
+        side_threshold  = 0.4
+        front_threshold = 0.5
         back_threshold  = 0.4
 
         r_prime    = np.array(r)
@@ -154,22 +158,36 @@ class task3:
 
         if (close_count > 75 and forward <= front_threshold and front_right <= alpha * 1.5):
             return State.END
-        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
+        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left <= alpha * 1 and front_right <= alpha * 1):
             return State.END
-        elif (forward <= front_threshold and backward <= back_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
+        elif (forward <= front_threshold and backward <= back_threshold and right <= side_threshold and front_left <= alpha * 1 and front_right <= alpha * 1):
             return State.END
-        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
-            return State.LD
-        elif (right <= side_threshold and front_right >= alpha * 1.5):
-            return State.RD
+        #elif (forward <= front_threshold or front_right <= alpha * 0.5 or front_left <= alpha * 0.5):
+            #return State.END
+
+        #elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
+            #return State.LD
+        #elif (right <= side_threshold and front_right >= alpha * 1.5):
+            #return State.RD
 
         
+        #elif (right >= side_threshold and right >= left and front_right >= alpha * 1.5 and back_right <= alpha * 1.5):
+            #return State.RD
 
-        elif (right >= side_threshold and front_right >= alpha * 1.5):
-            return State.RT
+        #elif (forward <= front_threshold):
+            #if (left >= right or front_left >= front_right):
+                #return State.LT
+            #else:
+                #return State.RT
 
-        elif (forward <= front_threshold and left >= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
-            return State.LT
+        #elif (right >= side_threshold and right >= left and front_right >= alpha * 1.5):
+            #return State.RT
+
+        #elif (forward <= front_threshold and left >= side_threshold and front_left >= alpha * 1.5 and back_left <= alpha * 1.5):
+            #return State.LD
+
+        #elif (forward <= front_threshold and left >= side_threshold and front_left >= alpha * 1.5):
+            #return State.LT
 
         else:
             return State.SW
@@ -205,24 +223,39 @@ class task3:
             self.rate.sleep()
         while True:
             state = self.state_cal(self.ranges)
+            back_left = np.amin(np.array(self.ranges[115:145]))
+            back_right = np.amin(np.array(self.ranges[215:245]))
+            front_right = np.amin(np.array(self.ranges[295:335]))
+            front_left = np.amin(np.array(self.ranges[25:65]))
+            corner_backs = np.amin(np.append(back_left, back_right))
+            corner_fronts = np.amin(np.append(front_left, front_right))
             if (state == State.SW):
                 front_right = self.ranges[-55]
                 e  = 0.4 - front_right
                 kp = 3
                 self.move_speed_setting(0.25, kp * e)
+                #self.move_speed_setting(0.25, 0)
 
-            elif (state == State.RD or state == State.RT):
-                self.move_speed_setting(0.25, -0.9)
+            elif (state == State.RD):
+                self.move_speed_setting(0.2, -0.9)
 
-            elif (state == State.LD or state == State.LT):
-                self.move_speed_setting(0.25, 1.5)
+            elif (state == State.RT):
+                self.move_speed_setting(0, -0.9)
+
+            elif (state == State.LD):
+                self.move_speed_setting(0.2, 0.9)
+
+            elif (state == State.LT):
+                self.move_speed_setting(0, 0.9)
 
             elif (state == State.END):
-                self.move_speed_setting(0, 1.5)
+                self.move_speed_setting(-0.05, 1.5)
 
             else:
                 self.move_speed_setting(0, 0)
 
+            if (corner_backs <= 0.2 and corner_fronts >= 0.2):
+                self.vel_cmd.linear.x = 0.1
             self.publish()
             self.rate.sleep()
 
