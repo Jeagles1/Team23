@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from ast import Num
+from std_msgs.msg import String
 import rospy
 import numpy as np
 from geometry_msgs.msg import Twist
@@ -7,6 +9,15 @@ from tf.transformations import euler_from_quaternion
 from math import degrees, pi
 from enum import Enum
 from random import randint
+from math import sqrt
+import roslaunch
+import argparse
+
+
+package = 'map_server'
+executable = 'map_saver'
+node = roslaunch.core.Node(package, executable)
+node.args = '-f task5_map'
 
 from sensor_msgs.msg import LaserScan
 
@@ -22,7 +33,7 @@ class State(Enum):
     ZE = 1
     RM = 2
 
-class task3:
+class task5():
 
     
     #Init range value
@@ -32,7 +43,7 @@ class task3:
     #Init function
     
     def __init__(self):
-        rospy.init_node('task3')
+        rospy.init_node('task5')
         self.posx = 0.0
         self.posy = 0.0
         self.yaw  = 0.0
@@ -45,7 +56,12 @@ class task3:
         self.rate            = rospy.Rate(10)
         self.scan_subscriber = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
 
-
+        cli = argparse.ArgumentParser(description=f"Command-line interface for the  node.")
+        print("------------------------------------")
+        cli.add_argument("-colour",metavar="COL", type=String, default="Blue")
+        
+        self.args = cli.parse_args(rospy.myargv()[1:])
+        print(self.args)
         self.camera_subscriber = rospy.Subscriber("/camera/rgb/image_raw",
             Image, self.camera_callback)
         self.cvbridge_interface = CvBridge()
@@ -136,63 +152,6 @@ class task3:
     def publish(self):
         self.publisher.publish(self.vel_cmd)
 
-    
-    #the Function of state calculation
-    def state_cal(self, r):
-        #forward  = r[0]
-        forward = np.amin(np.append(np.array(r[0:30]),np.array(r[330:360])))
-        left  =  np.amin(np.array(r[85:95]))
-        right  = np.amin(np.array(r[265:275]))
-        backward  = np.amin(np.array(r[175:185]))
-        back_left = np.amin(np.array(r[125:145]))
-        back_right = np.amin(np.array(r[215:235]))
-        front_right = np.amin(np.array(r[295:335]))
-        front_left = np.amin(np.array(r[25:65]))
-
-        alpha           = 0.4
-        side_threshold  = 0.4
-        front_threshold = 0.5
-        back_threshold  = 0.4
-
-        r_prime    = np.array(r)
-        close_count = float(np.count_nonzero(r_prime<=back_threshold)) / 360.0 * 100.0
-
-        if (close_count > 75 and forward <= front_threshold and front_right <= alpha * 1.5):
-            return State.END
-        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left <= alpha * 1 and front_right <= alpha * 1):
-            return State.END
-        elif (forward <= front_threshold and backward <= back_threshold and right <= side_threshold and front_left <= alpha * 1 and front_right <= alpha * 1):
-            return State.END
-        #elif (forward <= front_threshold or front_right <= alpha * 0.5 or front_left <= alpha * 0.5):
-            #return State.END
-
-        #elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
-            #return State.LD
-        #elif (right <= side_threshold and front_right >= alpha * 1.5):
-            #return State.RD
-
-        
-        #elif (right >= side_threshold and right >= left and front_right >= alpha * 1.5 and back_right <= alpha * 1.5):
-            #return State.RD
-
-        #elif (forward <= front_threshold):
-            #if (left >= right or front_left >= front_right):
-                #return State.LT
-            #else:
-                #return State.RT
-
-        #elif (right >= side_threshold and right >= left and front_right >= alpha * 1.5):
-            #return State.RT
-
-        #elif (forward <= front_threshold and left >= side_threshold and front_left >= alpha * 1.5 and back_left <= alpha * 1.5):
-            #return State.LD
-
-        #elif (forward <= front_threshold and left >= side_threshold and front_left >= alpha * 1.5):
-            #return State.LT
-
-        else:
-            return State.SW
-
     #Function of convert data
     def odom_convert(self, odom_data):
         orientation = odom_data.pose.pose.orientation
@@ -218,11 +177,26 @@ class task3:
         self.stop()
 
     #When entering the random movement state
-    def enteringRandom(self):
+    def enteringCompleteRandom(self):
+        self.theta_z0 = self.yaw
         self.targetturn = randint(90, 180)
         self.targetdirection = randint(0,1)
         if self.targetdirection == 0:
             self.targetdirection = -1
+
+    def enteringInformedRandom(self):
+        self.theta_z0 = self.yaw
+        # highest_a = np.argmax(self.ranges)
+        rangestuff = np.where(np.array(self.ranges) < 1, 10, np.array(self.ranges))
+        lowest_a = np.argmin(rangestuff)
+        if lowest_a > 180:
+            self.targetdirection = -2.5
+        else:
+            self.targetdirection = 2.5
+        if lowest_a == 180:
+            self.targetturn = 180
+        else:
+            self.targetturn = lowest_a % 180
 
     
     #Main loop function
@@ -230,6 +204,16 @@ class task3:
         while not (self.ranges):
             self.rate.sleep()
         while True:
+            map_path = "task5_map"
+
+            launch = roslaunch.scriptapi.ROSLaunch()
+            launch.start()
+
+            print(f"Saving map at time: {rospy.get_time()}...")
+            node = roslaunch.core.Node(package="map_server",
+                                            node_type="map_saver",
+                                            args=f"-f {map_path}")
+            process = launch.launch(node)
             forward = np.sum(np.append(np.array(self.ranges[0:15]), np.array(self.ranges[345:360])))
             front = np.amin(np.append(np.array(self.ranges[0:30]), np.array(self.ranges[330:360])))
             left = np.sum(self.ranges[30:90])
@@ -242,19 +226,26 @@ class task3:
             r = self.ranges[270:330]
             r = r[r != 0]
             minright = np.amin(r)
+            minsides = np.amin(np.append(l,r))
             print(minleft - minright)
             front_left = np.amin(np.array(self.ranges[35:45]))
             front_right = np.amin(np.array(self.ranges[315:325]))
+            mid_left = np.amin(np.array(self.ranges[45:55]))
+            mid_right = np.amin(np.array(self.ranges[305:315]))
             if (self.state == State.ZE):
                 # Zone Exploring
-                if (front_left <= 0.28 or front_right <= 0.28 or front <= 0.25):
+                if (front_left <= 0.26 or front_right <= 0.26 or front <= 0.23):
                     # About to hit a wall
-                    if ((front_left - front_right <= 0.05 and front_left - front_right >= -0.05) or (front_left >= 0.7 and front_right >= 0.7)):
+                    if ((front_left - front_right <= 0.1 and front_left - front_right >= -0.1) or (front_left >= 0.7 and front_right >= 0.7)):
                         # If it thinks its stuck when moving away, try turning, possibly change this to random
-                        self.move_speed_setting(-0.05, (left - right + 0.2) * 0.5 * (1 / forward))
+                        #self.move_speed_setting(-0.05, (left - right + 0.2) * 0.5 * (1 / forward))
+                        print("Stuck")
 
-                        #self.enteringRandom()
-                        #self.state = State.RM
+                        self.enteringCompleteRandom()
+                        #self.enteringInformedRandom()
+                        self.state = State.RM
+                    #elif ((front_left <= 0.22 or front_right <= 0.22) and front > 0.3):
+                        #self.move_speed_setting(forward * 0.005, 0)
                     else:
                         # If not, just move back
                         self.move_speed_setting(-0.2, 0)
@@ -267,57 +258,21 @@ class task3:
                         self.move_speed_setting((forward * 0.005), 0)
                     else:
                         # If it is not in a corridoor, move based on zone in front of and around it
-                        self.move_speed_setting((forward * 0.005), (left - right) * 1 * (1 / forward))
-            elif (self.State == State.RM):
+                        self.move_speed_setting((forward * 0.005), (((left * mid_left) - (right * mid_right)) * 1.5 * (1 / (forward + 1)) * minsides))
+            elif (self.state == State.RM):
                 # Random Movement
-                if abs(self.theta_z0 - self.theta_z) >= ((self.targetdirection / 180) * pi):
+                if abs(self.theta_z0 - self.yaw) >= ((self.targetturn / 180) * pi):
                     # Stop and go back to zone exploration
+                    self.move_speed_setting(0, 0)
                     self.state = State.ZE
                 else:
                     # Keep Turning
-                    self.move_speed_setting(0, self.targetdirection)
-
-            """
-            state = self.state_cal(self.ranges)
-            back_left = np.amin(np.array(self.ranges[115:145]))
-            back_right = np.amin(np.array(self.ranges[215:245]))
-            front_right = np.amin(np.array(self.ranges[295:335]))
-            front_left = np.amin(np.array(self.ranges[25:65]))
-            corner_backs = np.amin(np.append(back_left, back_right))
-            corner_fronts = np.amin(np.append(front_left, front_right))
-            if (state == State.SW):
-                front_right = self.ranges[-55]
-                e  = 0.4 - front_right
-                kp = 3
-                self.move_speed_setting(0.25, kp * e)
-                #self.move_speed_setting(0.25, 0)
-
-            elif (state == State.RD):
-                self.move_speed_setting(0.2, -0.9)
-
-            elif (state == State.RT):
-                self.move_speed_setting(0, -0.9)
-
-            elif (state == State.LD):
-                self.move_speed_setting(0.2, 0.9)
-
-            elif (state == State.LT):
-                self.move_speed_setting(0, 0.9)
-
-            elif (state == State.END):
-                self.move_speed_setting(-0.05, 1.5)
-
-            else:
-                self.move_speed_setting(0, 0)
-
-            if (corner_backs <= 0.2 and corner_fronts >= 0.2):
-                self.vel_cmd.linear.x = 0.1
-            """
+                    self.move_speed_setting(-0.05, self.targetdirection)
             self.publish()
             self.rate.sleep()
 
 if __name__ == '__main__':
     try:
-        task3()
+        task5()
     except rospy.ROSInterruptException:
         pass
