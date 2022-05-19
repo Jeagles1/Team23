@@ -10,7 +10,7 @@ from sensor_msgs.msg import LaserScan
 from math import cos, sin, atan, pi, sqrt
 from random import randint, random, choice
 from tf.transformations import euler_from_quaternion
-from com2009_msgs.msg import SearchAction,SearchGoal,SearchFeedback
+from com2009_msgs.msg import SearchAction,SearchGoal
 
 class client:
 
