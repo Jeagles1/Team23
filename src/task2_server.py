@@ -35,7 +35,7 @@ class server(object):
 
         self.subscriber = rospy.Subscriber('/odom', Odometry, self.odom_convert)
 
-    def set_cmd_vel(self, linear = 0.0, angular = 0.0):
+    def set_vel(self, linear = 0.0, angular = 0.0):
         self.vel_cmd.linear.x  = linear
         self.vel_cmd.angular.z = angular
 
@@ -43,7 +43,7 @@ class server(object):
         self.publisher.publish(self.vel_cmd)
 
     def stop_move(self):
-        self.set_cmd_vel()
+        self.set_vel()
         self.publish()
 
     #Callback function for laser data
@@ -90,7 +90,7 @@ class server(object):
 
         print("Request to move forwards at {}m/s, and to stop at {}m".format(velocity, distance))
 
-        self.set_cmd_vel(velocity, 0) # set velocity
+        self.set_vel(velocity, 0) # set velocity
         
         #Do while loop when min_distance has not been created
         while not self.min_distance:

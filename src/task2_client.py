@@ -40,7 +40,7 @@ class client:
         rospy.on_shutdown(self.shutdown)
         self.main()
 
-    def set_cmd_vel(self, linear = 0.0, angular = 0.0):
+    def set_vel(self, linear = 0.0, angular = 0.0):
 
         self.vel_cmd.linear.x  = linear
         self.vel_cmd.angular.z = angular
@@ -49,7 +49,7 @@ class client:
         self.publisher.publish(self.vel_cmd)
 
     def stop_move(self):
-        self.set_cmd_vel()
+        self.set_vel()
         self.publish()
    
     #Callback function for laser data received
@@ -107,7 +107,7 @@ class client:
             else:
                 turn_velocity = 0.40
 
-        self.set_cmd_vel(0, turn_velocity)
+        self.set_vel(0, turn_velocity)
         self.publish()
 
         

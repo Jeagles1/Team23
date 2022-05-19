@@ -12,24 +12,17 @@ from sensor_msgs.msg import LaserScan
 
 class State(Enum):
     
-    #Init States, left turning, right turning,left distance, right distance, strait wall, end
+    #Init States, left turning, right turning, straight forward, stop then turn around
     LT = 1
     RT = 2
-    LD = 3
-    RD = 4
-    SW = 5
-    END = 6
+    SW = 3
+    TURNROUND = 4
 
 class task3:
 
-    '''
-    Init range value
-    '''
+    #Init range value
     ranges = None
-
-    '''
-    Init function
-    '''
+    #Init function
     def __init__(self):
         rospy.init_node('task3')
         self.posx = 0.0
@@ -48,7 +41,7 @@ class task3:
         self.main()
 
     
-    #Function to round number
+    #Function to round number in two decimal places
     def round(self, value, precision):
         value = int(value * (10**precision))
 
@@ -84,21 +77,17 @@ class task3:
         close_count = float(np.count_nonzero(r_prime<=back_threshold)) / 360.0 * 100.0
 
         if (close_count > 75 and forward <= front_threshold and front_right <= alpha * 1.5):
-            return State.END
+            return State.TURNROUND
         elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
-            return State.END
+            return State.TURNROUND
         elif (forward <= front_threshold and backward <= back_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
-            return State.END
+            return State.TURNROUND
         elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
-            return State.LD
+            return State.LT
         elif (right <= side_threshold and front_right >= alpha * 1.5):
-            return State.RD
-
-        
-
+            return State.RT
         elif (right >= side_threshold and front_right >= alpha * 1.5):
             return State.RT
-
         elif (forward <= front_threshold and left >= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
             return State.LT
 
@@ -142,13 +131,13 @@ class task3:
                 kp = 3
                 self.move_speed_setting(0.25, kp * e)
 
-            elif (state == State.RD or state == State.RT):
+            elif (state == State.RT):
                 self.move_speed_setting(0.25, -0.9)
 
-            elif (state == State.LD or state == State.LT):
+            elif (state == State.LT):
                 self.move_speed_setting(0.25, 1.5)
 
-            elif (state == State.END):
+            elif (state == State.TURNROUND):
                 self.move_speed_setting(0, 1.5)
 
             else:
