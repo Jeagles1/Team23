@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 # Import the core Python modules for ROS and to implement ROS Actions:
+from turtle import distance
 import numpy as np
 import rospy
 import math
@@ -78,14 +79,14 @@ class colour_search(object):
         
         self.m00 = 0
         self.m00_min = 100000
-        self.target_colour = "Turquoise"
+        self.target_colour = ""
 
-        # Thresholds for ["Blue", "Red", "Green", "Turquoise"]
-        self.colours = ["Blue", "Red", "Green", "Turquoise"]
-        self.lower = [(115, 224, 100), (0, 185, 100), (25, 150, 100), (75, 150, 100)]
-        self.upper = [(130, 255, 255), (10, 255, 255), (70, 255, 255), (100, 255, 255)]
+        # Thresholds for ["Blue", "Red", "Green", "Turquoise", "Purple","Yellow"]
+        self.colours = ["Blue", "Red", "Green", "Turquoise", "Purple","Yellow"]
+        self.lower = [(115, 224, 100), (0, 185, 100), (25, 150, 100), (75, 150, 100),(145,205,100),(25,150,100)]
+        self.upper = [(130, 255, 255), (20, 255, 255), (70, 255, 255), (100, 255, 255),(155,255,255),(35,255,255)]
 
-        self.state = State.BEACON
+        self.state = State.FINDCOLOUR
 
     #Function to round number
     def round(self, value, precision):
@@ -95,8 +96,20 @@ class colour_search(object):
 
    # Function for moving speed setting
     def move_speed_setting(self, linear = 0.0, angular = 0.0):
-        self.vel_cmd.linear.x  = linear
+        self.vel_cmd.linear.x  = linear 
         self.vel_cmd.angular.z = angular
+
+    def distance_to_Beacon(self, r):
+        forward  = r[0]
+        return forward
+
+    def distance_to_LeftWall(self, r):
+        left  = r[55]
+        return left
+    
+    def distance_to_RightWall(self, r):
+        right  = r[-55]
+        return right
 
     def state_cal(self, r):
         forward  = r[0]
@@ -106,33 +119,27 @@ class colour_search(object):
         front_right = r[-55]
         front_left = r[55]
 
-        alpha           = 0.6
-        side_threshold  = 0.5
+        alpha           = 0.4
+        side_threshold  = 0.7
         front_threshold = 0.6
         back_threshold  = 0.8
 
         r_prime    = np.array(r)
         close_count = float(np.count_nonzero(r_prime<=back_threshold)) / 360.0 * 100.0
 
+       
         if (close_count > 75 and forward <= front_threshold and front_right <= alpha * 1.5):
             return State.END
         elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
-            return State.END
-        elif (forward <= front_threshold and backward <= back_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
             return State.END
         elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
             return State.LD
         elif (right <= side_threshold and front_right >= alpha * 1.5):
             return State.RD
-
-        
-
         elif (right >= side_threshold and front_right >= alpha * 1.5):
             return State.RT
-
-        elif (forward <= front_threshold and left >= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
+        elif (forward <= front_threshold and left >= side_threshold and right <= side_threshold and front_left >= alpha * 2.5 and front_right <= alpha * 1.5):
             return State.LT
-
         else:
             return State.SW
 
@@ -173,16 +180,17 @@ class colour_search(object):
             print(e)
         
         height, width, _ = cv_img.shape
-        crop_width = width - 800
-        crop_height = 200
+        crop_width = width - 1500
+        crop_height = 50
         crop_x = int((width/2) - (crop_width/2))
         crop_y = int((height/2) - (crop_height/2))
+        
 
         crop_img = cv_img[crop_y:crop_y+crop_height, crop_x:crop_x+crop_width]
         hsv_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
 
         # create a single mask to accommodate all four dectection colours:
-        for i in range(4):
+        for i in range(6):
             if i == 0:
                 mask = cv2.inRange(hsv_img, self.lower[i], self.upper[i])
             else:
@@ -191,31 +199,35 @@ class colour_search(object):
         m = cv2.moments(mask)
         
         self.m00 = m["m00"]
+        
         self.cy = m["m10"] / (m["m00"] + 1e-5)
 
-
-        if self.m00 > self.m00_min  :
-            cv2.circle(crop_img, (int(self.cy), 200), 10, (0, 0, 255), 2)
-          
         cv2.imshow("cropped image", crop_img)
         
         hsv_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
         self.lasttime = rospy.get_rostime() 
-        # print(hsv_img[0][0])
         if (self.lasttimeran == 0):
                 self.lasttimeran = self.lasttime.secs
                 
-           
+        print(hsv_img[25][25])
         """add code to make it only do this after x seconds just in case"""
-        for i in range(4):
-            if(self.lower[i][0]<=hsv_img[0][0][0] and self.upper[i][0]>=hsv_img[0][0][0] and self.lower[i][1]<=hsv_img[0][0][1] and self.upper[i][1]>=hsv_img[0][0][1] and self.target_colour == "" and (self.lasttime.secs - self.lasttimeran >= 9)):
+        for i in range(6):
+            if(self.lower[i][0]<=hsv_img[25][25][0] and self.upper[i][0]>=hsv_img[25][25][0] and self.lower[i][1]<=hsv_img[25][25][1] and self.upper[i][1]>=hsv_img[25][25][1] and self.target_colour == "" and (self.lasttime.secs - self.lasttimeran >= 6)):
                 self.target_colour = (self.colours[i])
                 self.state = State.END
                 print("Target colour is:" + self.target_colour)
+                # Thresholds for ["Blue", "Red", "Green", "Turquoise", "Purple","Yellow"]
+                self.target_colour = "Red"
+                print("Target colour is:" + self.target_colour)
 
-        for i in range(4):
-            if(self.lower[i][0]<=hsv_img[0][0][0] and self.upper[i][0]>=hsv_img[0][0][0] and self.lower[i][1]<=hsv_img[0][0][1] and self.upper[i][1]>=hsv_img[0][0][1] and self.target_colour != "" and (self.lasttime.secs - self.lasttimeran >= 15)):
-                if (self.target_colour == (self.colours[i])):
+        for i in range(6):
+            if(self.lower[i][0]<=hsv_img[25][25][0] and self.upper[i][0]>=hsv_img[25][25][0] and self.lower[i][1]<=hsv_img[25][25][1] and self.upper[i][1]>=hsv_img[25][25][1] and self.target_colour != "" and (self.lasttime.secs - self.lasttimeran >= 10)):
+
+                if (self.target_colour == (self.colours[i]) and self.cy >= 80 and self.cy <= 120):
+                    print("Found beacon")
+                    self.vel_cmd.linear.x = 0
+                    self.vel_cmd.angular.z = 0
+                    self.pub.publish(self.vel_cmd)
                     self.state = State.BEACON
                     
                 
@@ -231,11 +243,8 @@ class colour_search(object):
         
         while not self.ctrl_c and not (self.ranges) :
             self.rate.sleep()        
-        while not self.ctrl_c and (self.state == State.FINDCOLOUR):
-           
+        while not self.ctrl_c and (self.state == State.FINDCOLOUR):    
             self.rate.sleep()
-            if(self.target_colour!=""):
-                print(self.target_colour)
 
             self.vel_cmd.angular.z = 0.5
             self.pub.publish(self.vel_cmd)
@@ -246,22 +255,31 @@ class colour_search(object):
         while not self.ctrl_c and (self.state != State.FINDCOLOUR) and self.move_rate != "stop":
             if (self.state == State.BEACON):
                 self.pub.publish(self.vel_cmd)
-                print(self.move_rate)  
-                print(self.cy)
-                if self.m00 > self.m00_min*5:
+                
+                if (self.cy >= 80 and self.cy <= 100):
+                    self.vel_cmd.angular.z = 0
+                elif (self.cy<80 or self.distance_to_RightWall(self.ranges) <= 0.4):
+                    print("Turning left")
+                    self.vel_cmd.angular.z = 0.4
+                elif (self.distance_to_LeftWall(self.ranges) <= 0.4 or self.cy>100):
+                    print("Turning right")
+                    self.vel_cmd.angular.z = -0.4
+
+                if (self.distance_to_Beacon(self.ranges)<0.45):
                 # blob detected
-                    if self.cy >= 505 and self.cy <= 550:
-                        if self.move_rate == "slow":
-                            self.move_rate = "stop"
+                    self.move_rate = "stop"
                         
-                        
+                    
+                    
                 else:
-                    self.move_rate = "fast"
+                    self.move_rate = "slow"
                 if self.move_rate == "fast":
                     self.vel_cmd.linear.x = 0.3
                 elif self.move_rate == "slow":
+                    print("Slow")
                     self.vel_cmd.linear.x = 0.2
-                elif self.move_rate == "stop":                    
+                elif self.move_rate == "stop":    
+                    print("Stop")                
                     self.vel_cmd.linear.x = 0.2
                 else:
                     self.vel_cmd.linear.x = 0.2
@@ -276,7 +294,7 @@ class colour_search(object):
                     self.move_speed_setting(0.25, kp * e)
 
                 elif (self.state == State.RD or self.state == State.RT):
-                    self.move_speed_setting(0.25, -0.9)
+                    self.move_speed_setting(0.25, -1.2)
 
                 elif (self.state == State.LD or self.state == State.LT):
                     self.move_speed_setting(0.25, 1.5)
