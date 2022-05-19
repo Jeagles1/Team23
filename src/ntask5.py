@@ -12,6 +12,8 @@ from random import randint
 from math import sqrt
 import roslaunch
 import argparse
+from pathlib import Path
+import os
 
 
 package = 'map_server'
@@ -204,7 +206,16 @@ class task5():
         while not (self.ranges):
             self.rate.sleep()
         while True:
-            map_path = "task5_map"
+            print("----------------------------------------------------------------------------------------------")
+            print(__file__)
+            print("parent = " + os.path.abspath(os.path.join(__file__, "..")))
+            #map_path = Path("/home/student/Team23/maps/task5_map")
+            #map_path.mkdir(parents=True, exist_ok=True)
+            #map_path = "Team23/maps/task5_map"
+            #map_path = os.path.join(os.path.abspath(os.path.join(__file__, "..")), "maps/task5_map")
+            map_path = "/home/student/catkin_ws/src/Team23/maps/task5_map"
+            #map_path = "/../maps/task5_map"
+            print(map_path)
 
             launch = roslaunch.scriptapi.ROSLaunch()
             launch.start()
