@@ -1,5 +1,6 @@
 #! /usr/bin/python3
 
+from tkinter.tix import TList
 import rospy
 import actionlib
 import numpy as np
@@ -16,16 +17,18 @@ class client:
 
     ranges  = None
     closest_object_angle = None
+    area = None
 
    #Init function
     def __init__(self):
         self.publisher = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.vel_cmd   = Twist()
 
+        self.area = np.zeros((3,3))
         self.posx = 0.0
         self.posy = 0.0
         self.yaw  = 0.0
-
+        self.all_degree = 0
         self.subscriber      = rospy.Subscriber('/odom', Odometry, self.odom_convert)
         self.action_complete = False
 
@@ -80,12 +83,44 @@ class client:
         position    = odom_data.pose.pose.position
         (_, _, yaw) = euler_from_quaternion([orientation.x,
             orientation.y, orientation.z, orientation.w],'sxyz')
-
+        self.last_yaw = self.yaw
         self.posx = self.round_number(position.x, 4)
         self.posy = self.round_number(position.y, 4)
-        self.yaw  = self.round_number(degrees(yaw), 4)
-    
-    
+        self.yaw  = self.round_number((yaw), 4)
+        degree_inc = 3.14159 /4
+        tubelen=0.8
+        if ((self.yaw-self.last_yaw)>0 and (self.yaw-self.last_yaw)<degree_inc):
+            self.all_degree = self.all_degree + (self.yaw-self.last_yaw)
+        elif ((self.yaw-self.last_yaw)<0 and (self.last_yaw-self.yaw)<degree_inc): 
+            self.all_degree = self.all_degree + (self.last_yaw-self.yaw)
+
+        if(self.posx < -(1) and self.posy < -(1)):
+            self.area[0][0]=1
+            #print("search1")
+        elif (self.posx < -(1) and self.posy > -0.63 and self.posy<0.6):
+            self.area[0][1]=1
+            #print("search2")
+        elif (self.posx < -(1) and self.posy > (1)):
+            self.area[0][2]=1
+            #print("3")
+        elif (self.posx > -(0.6) and self.posx < (0.6) and self.posy>-3*0.6 and self.posy <(-0.6)):
+            self.area[1][0] =1
+            #print("4")
+        elif (self.posx > -(0.6) and self.posx < (0.6) and self.posy>(-0.6) and self.posy < 0.6):
+            self.area[1][1] =1
+            #print("5")
+        elif (self.posx > -(0.6) and self.posx < (0.6) and self.posy>1 and self.posy < 2.2):
+            self.area[1][2] =1
+            #print("6")
+        elif (self.posx > (1) and self.posx < (2.2) and self.posy>-2.2 and self.posy < -1):
+            self.area[2][0] =1
+            #print("7")
+        elif (self.posx > 1 and self.posx < (2.2) and self.posy>-0.6 and self.posy <0.6):
+            self.area[2][1] =1
+            #print("8")
+        elif (self.posx > 1 and self.posx < (2.2) and self.posy>1 and self.posy <2.2):
+            self.area[2][2] =1
+            #print("9")
     #Adjust direction to avoid being hit 
     def adjust_direction(self):
         init_value            = 1.5
@@ -93,34 +128,112 @@ class client:
         right_degree_distance = np.array(self.ranges[270:359])
 
         
-        #If condition for Determine which direction to turn to adjust    
+        #If condition for Determine which direction to turn to adjust 
+          
         if left_degree_distance.max() >= init_value and right_degree_distance.max() >= init_value:
             if self.closest_object_angle < 0:
-                turn_velocity = -0.40
+                turn_velocity = -0.80
             else:
-                turn_velocity = 0.40
+                turn_velocity = 0.80
 
         else:
 
             if right_degree_distance.max() > left_degree_distance.max():
-                turn_velocity = -0.40
+                turn_velocity = -0.80
             else:
-                turn_velocity = 0.40
+                turn_velocity = 0.80
 
         self.set_vel(0, turn_velocity)
         self.publish()
 
         
         #If condition for determine when to stop adjusting 
-        if turn_velocity < 0:
-            while np.array(self.ranges[0:20]).min() <= init_value:
+        self.len = 2.5
+        scanlen= 15
+        scanlen2= 16
+        tubelen=0.8
+        self.all_degree = 0
+        degree_inc = 3.14159 /4
+        while True:
+                if self.all_degree >3.14159/4 :
+                    break
+                
+                self.predict_x = self.posx +self.len*cos(self.yaw)
+                self.predict_y =self.posy +self.len*sin(self.yaw)
+                if(self.predict_x < -(tubelen) and self.predict_y < -(tubelen)):
+                    status = self.area[0][0]
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search1")
+                        break
+                elif (self.predict_x < -(tubelen) and self.predict_y > -(tubelen) and self.predict_y<(tubelen)):
+                    status=self.area[0][1]
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search2")
+                        break
+                elif (self.predict_x < -(tubelen) and self.predict_y > (tubelen)):
+                    status=self.area[0][2]
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search3")
+                        break
+                elif (self.predict_x > -(tubelen) and self.predict_x < (tubelen) and self.predict_y>-3*tubelen and self.predict_y <-tubelen):
+                    status=self.area[1][0] 
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search4")
+                        break
+                elif (self.predict_x > -(tubelen) and self.predict_x < (tubelen) and self.predict_y>-tubelen and self.predict_y <tubelen):
+                    status=self.area[1][1]
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search5")
+                        break
+                elif (self.predict_x > -(tubelen) and self.predict_x < (tubelen) and self.predict_y>tubelen and self.predict_y < 3*tubelen):
+                    status=self.area[1][2] 
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search6")
+                        break
+                elif (self.predict_x > (tubelen) and self.predict_x < (3*tubelen) and self.predict_y>-3*tubelen and self.predict_y <-tubelen):
+                    status=self.area[2][0] 
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search7")
+                        break
+                elif (self.predict_x > tubelen and self.predict_x < (3*tubelen) and self.predict_y>-tubelen and self.predict_y <tubelen):
+                    status=self.area[2][1]
+                    if status ==0:
+                        if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                        print("search8")
+                        break
+                elif (self.predict_x > tubelen and self.predict_x < (3*tubelen) and self.predict_y>tubelen and self.predict_y <3*tubelen):
+                   status= self.area[2][2] 
+                   if status ==0:
+                       if np.array(self.ranges[0:scanlen]).min() <= init_value or np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                            continue
+                       print("search9")
+                       break
                 continue
+        if(self.all_degree >3.14159):
+            if turn_velocity < 0:
+                while np.array(self.ranges[0:scanlen]).min() <= init_value:
+                    continue
 
-        else:
+            else:
 
-            while np.array(self.ranges[-21:]).min() <= init_value:
-                continue
-
+                while np.array(self.ranges[-scanlen2:]).min() <= init_value:
+                    continue
+                
         self.stop_move()
 
     

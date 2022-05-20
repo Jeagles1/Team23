@@ -48,10 +48,10 @@ class server(object):
 
     #Callback function for laser data
     def scan_callback(self, scan_data):
-        left_view   = scan_data.ranges[0:21]
-        right_view  = scan_data.ranges[-20:]
+        left_view   = scan_data.ranges[0:15]
+        right_view  = scan_data.ranges[-16:]
         front_view  = np.array(left_view[::-1] + right_view[::-1])
-        view_angles = np.arange(-20, 21)
+        view_angles = np.arange(-16, 15)
         self.min_distance = front_view.min()
         self.object_angle = view_angles[np.argmin(front_view)]
     
