@@ -94,7 +94,7 @@ class colour_search(object):
         self.ctrl_c = False
         rospy.on_shutdown(self.shutdown_ops)
 
-        self.rate = rospy.Rate(5)
+   
         
         self.m00 = 0
         self.m00_min = 100000
@@ -103,7 +103,7 @@ class colour_search(object):
         # Thresholds for ["Blue", "Red", "Green", "Turquoise", "Purple","Yellow"]
         self.colours = ["Blue", "Red", "Green", "Turquoise", "Purple","Yellow"]
         self.lower = [(115, 224, 100), (0, 185, 100), (25, 150, 100), (75, 150, 100),(145,205,100),(25,150,100)]
-        self.upper = [(130, 255, 255), (20, 255, 255), (70, 255, 255), (100, 255, 255),(155,255,255),(35,255,255)]
+        self.upper = [(130, 255, 255), (10, 255, 255), (70, 255, 255), (100, 255, 255),(155,255,255),(35,255,255)]
 
         self.state = State.FINDCOLOUR
 
@@ -127,8 +127,8 @@ class colour_search(object):
     
    # Function for moving speed setting
     def move_speed_setting(self, linear = 0.0, angular = 0.0):
-        self.vel_cmd.linear.x  = linear * (3 / 4)
-        self.vel_cmd.angular.z = angular * (1 / 3)
+        self.vel_cmd.linear.x  = linear 
+        self.vel_cmd.angular.z = angular 
 
 
     #Function for data publishing
@@ -160,27 +160,43 @@ class colour_search(object):
         cv2.destroyAllWindows()
         self.ctrl_c = True
 
-    #When entering the random movement state
-    def enteringCompleteRandom(self):
-        self.theta_z0 = self.yaw
-        self.targetturn = randint(90, 180)
-        self.targetdirection = randint(0,1)
-        if self.targetdirection == 0:
-            self.targetdirection = -1
+    def state_cal(self, r):
+        forward  = r[0]
+        left  = r[90]
+        right  = r[-90]
+        backward  = r[180]
+        front_right = r[-55]
+        front_left = r[55]
 
-    def enteringInformedRandom(self):
-        self.theta_z0 = self.yaw
-        # highest_a = np.argmax(self.ranges)
-        rangestuff = np.where(np.array(self.ranges) < 1, 10, np.array(self.ranges))
-        lowest_a = np.argmin(rangestuff)
-        if lowest_a > 180:
-            self.targetdirection = -2.5
+        alpha           = 0.4
+        side_threshold  = 0.7
+        front_threshold = 0.6
+        back_threshold  = 0.8
+
+        r_prime    = np.array(r)
+        close_count = float(np.count_nonzero(r_prime<=back_threshold)) / 360.0 * 100.0
+
+        if (close_count > 75 and forward <= front_threshold and front_right <= alpha * 1.5):
+            return State.END
+        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.END
+        elif (forward <= front_threshold and backward <= back_threshold and right <= side_threshold and front_left <= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.END
+        elif (forward <= front_threshold and left <= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.LT
+        elif (right <= side_threshold and front_right >= alpha * 1.5):
+            return State.RT
+
+        
+
+        elif (right >= side_threshold and front_right >= alpha * 1.5):
+            return State.RT
+
+        elif (forward <= front_threshold and left >= side_threshold and right <= side_threshold and front_left >= alpha * 1.5 and front_right <= alpha * 1.5):
+            return State.LT
+
         else:
-            self.targetdirection = 2.5
-        if lowest_a == 180:
-            self.targetturn = 180
-        else:
-            self.targetturn = lowest_a % 180
+            return State.SW
 
     def callback_function(self, odom_data):
         angular_x = odom_data.pose.pose.orientation.x
@@ -205,7 +221,7 @@ class colour_search(object):
             print(e)
         
         height, width, _ = cv_img.shape
-        crop_width = width - 1500
+        crop_width = width
         crop_height = 50
         crop_x = int((width/2) - (crop_width/2))
         crop_y = int((height/2) - (crop_height/2))
@@ -234,7 +250,7 @@ class colour_search(object):
         if (self.lasttimeran == 0):
                 self.lasttimeran = self.lasttime.secs
                 
-        print(hsv_img[25][25])
+        # print(hsv_img[0][0])
         """add code to make it only do this after x seconds just in case"""
         for i in range(6):
             if(self.lower[i][0]<=hsv_img[25][25][0] and self.upper[i][0]>=hsv_img[25][25][0] and self.lower[i][1]<=hsv_img[25][25][1] and self.upper[i][1]>=hsv_img[25][25][1] and self.target_colour == "" and (self.lasttime.secs - self.lasttimeran >= 6)):
@@ -247,7 +263,7 @@ class colour_search(object):
 
         for i in range(6):
             if(self.lower[i][0]<=hsv_img[25][25][0] and self.upper[i][0]>=hsv_img[25][25][0] and self.lower[i][1]<=hsv_img[25][25][1] and self.upper[i][1]>=hsv_img[25][25][1] and self.target_colour != "" and (self.lasttime.secs - self.lasttimeran >= 10)):
-
+                print(self.colours[i])
                 if (self.target_colour == (self.colours[i]) and self.cy >= 80 and self.cy <= 120):
                     print("Found beacon")
                     self.vel_cmd.linear.x = 0
@@ -312,60 +328,31 @@ class colour_search(object):
                 
             
             else:
-                forward = np.sum(np.append(np.array(self.ranges[0:15]), np.array(self.ranges[345:360])))
-            front = np.amin(np.append(np.array(self.ranges[0:30]), np.array(self.ranges[330:360])))
-            left = np.sum(self.ranges[30:90])
-            right = np.sum(self.ranges[270:330])
-            l = self.ranges[30:90]
-            l = l[l != 0]
-            minleft = np.amin(l)
-            #minleft = np.amin(self.ranges[30:90][self.ranges[30:90] != 0])
-            #minright = np.amin(self.ranges[270:330][self.ranges[270:330 != 0]])
-            r = self.ranges[270:330]
-            r = r[r != 0]
-            minright = np.amin(r)
-            minsides = np.amin(np.append(l,r))
-            print(minleft - minright)
-            front_left = np.amin(np.array(self.ranges[35:45]))
-            front_right = np.amin(np.array(self.ranges[315:325]))
-            mid_left = np.amin(np.array(self.ranges[45:55]))
-            mid_right = np.amin(np.array(self.ranges[305:315]))
-            if (self.state == State.ZE):
-                # Zone Exploring
-                if (front_left <= 0.26 or front_right <= 0.26 or front <= 0.23):
-                    # About to hit a wall
-                    if ((front_left - front_right <= 0.1 and front_left - front_right >= -0.1) or (front_left >= 0.7 and front_right >= 0.7)):
-                        # If it thinks its stuck when moving away, try turning, possibly change this to random
-                        #self.move_speed_setting(-0.05, (left - right + 0.2) * 0.5 * (1 / forward))
-                        print("Stuck")
+                state = self.state_cal(self.ranges)
+                if (state == State.SW):
+                    front_right = self.ranges[-55]
+                    e  = 0.4 - front_right
+                    kp = 3
+                    self.move_speed_setting(0.25, kp *e)
+                elif (state == State.RT):
+                    self.move_speed_setting(0.25, -0.9)
 
-                        self.enteringCompleteRandom()
-                        #self.enteringInformedRandom()
-                        self.state = State.RM
-                    #elif ((front_left <= 0.22 or front_right <= 0.22) and front > 0.3):
-                        #self.move_speed_setting(forward * 0.005, 0)
-                    else:
-                        # If not, just move back
-                        self.move_speed_setting(-0.2, 0)
+                elif (state == State.LT):
+                    self.move_speed_setting(0.25, 1.5)
+
+                elif (state == State.END):
+                    self.move_speed_setting(0,1.5)
+                elif (state == State.RT or state == State.RT):
+                    self.move_speed_setting(0.25, -0.9)
+
+                elif (state == State.LT or state == State.LT):
+                    self.move_speed_setting(0.25, 1.5)
+
+                elif (state == State.END):
+                    self.move_speed_setting(0, 1.5)
+
                 else:
-                    # If not about to hit a wall
-                    if (minleft - minright <= 0.03 and minleft - minright >= -0.03):
-                        # If it thinks its in a 'corridoor', then move just forward
-                        print("yeah")
-                        #self.move_speed_setting((forward * 0.005), 1 * (1 / forward))
-                        self.move_speed_setting((forward * 0.005), 0)
-                    else:
-                        # If it is not in a corridoor, move based on zone in front of and around it
-                        self.move_speed_setting((forward * 0.005), (((left * mid_left) - (right * mid_right)) * 1.5 * (1 / (forward + 1)) * minsides))
-            elif (self.state == State.RM):
-                # Random Movement
-                if abs(self.theta_z0 - self.yaw) >= ((self.targetturn / 180) * pi):
-                    # Stop and go back to zone exploration
                     self.move_speed_setting(0, 0)
-                    self.state = State.ZE
-                else:
-                    # Keep Turning
-                    self.move_speed_setting(-0.05, self.targetdirection)
 
             self.publish()
             self.rate.sleep()
