@@ -36,6 +36,7 @@ class State(Enum):
     #Init States, zone explore, random movement
     ZE = 1
     RM = 2
+    RT = 3
 
 class task5():
 
@@ -48,6 +49,7 @@ class task5():
     
     def __init__(self):
         rospy.init_node('task5')
+        self.verbose = False
         self.posx = 0.0
         self.posy = 0.0
         self.yaw  = 0.0
@@ -57,11 +59,10 @@ class task5():
         self.vel_cmd    = Twist()
 
 
-        self.rate            = rospy.Rate(10)
+        self.rate            = rospy.Rate(20)
         self.scan_subscriber = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
 
-        cli = argparse.ArgumentParser(description=f"Command-line interface for the  node.")
-        print("------------------------------------")
+        cli = argparse.ArgumentParser(description=f"Command-line interface for the node.")
         cli.add_argument("-colour",metavar="COL", type=String, default="Blue")
         
         self.args = cli.parse_args(rospy.myargv()[1:])
@@ -72,6 +73,8 @@ class task5():
         self.m00 = 0
         self.m00_min = 100000
         self.target_colour = "Blue"
+
+        self.takenpic = False
 
         self.colours = ["Blue", "Red", "Green", "Turquoise"]
         self.lower = [(115, 224, 100), (0, 185, 100), (25, 150, 100), (75, 150, 100)]
@@ -235,18 +238,26 @@ class task5():
             front_right = np.amin(np.array(self.ranges[315:325]))
             mid_left = np.amin(np.array(self.ranges[45:55]))
             mid_right = np.amin(np.array(self.ranges[305:315]))
+            minback = np.amin(self.ranges[150:210])
+            wheelleft = np.amin(self.ranges[55:65])
+            wheelright = np.amin(self.ranges[295:305])
             if (self.state == State.ZE):
                 # Zone Exploring
-                if (front_left <= 0.26 or front_right <= 0.26 or front <= 0.23):
+                if (front_left <= 0.28 or front_right <= 0.28 or front <= 0.23 or wheelleft <= 0.27 or wheelright <= 0.27):
                     # About to hit a wall
+                    if (minback <= 0.3):
+                        self.theta_z0 = self.yaw
+                        self.state = State.RT
                     if ((front_left - front_right <= 0.1 and front_left - front_right >= -0.1) or (front_left >= 0.7 and front_right >= 0.7)):
                         # If it thinks its stuck when moving away, try turning, possibly change this to random
                         #self.move_speed_setting(-0.05, (left - right + 0.2) * 0.5 * (1 / forward))
                         print("Stuck")
 
-                        self.enteringCompleteRandom()
+                        #self.enteringCompleteRandom()
                         #self.enteringInformedRandom()
-                        self.state = State.RM
+                        #self.state = State.RM
+                        self.theta_z0 = self.yaw
+                        self.state = State.RT
                     #elif ((front_left <= 0.22 or front_right <= 0.22) and front > 0.3):
                         #self.move_speed_setting(forward * 0.005, 0)
                     else:
@@ -271,6 +282,12 @@ class task5():
                 else:
                     # Keep Turning
                     self.move_speed_setting(-0.05, self.targetdirection)
+            elif (self.state == State.RT):
+                if abs(self.theta_z0 - self.yaw) >= (pi):
+                    self.move_speed_setting(0, 0)
+                    self.state = State.ZE
+                else:
+                    self.move_speed_setting(0, -1)
             self.publish()
             self.rate.sleep()
 

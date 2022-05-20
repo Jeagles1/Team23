@@ -128,7 +128,7 @@ class colour_search(object):
    # Function for moving speed setting
     def move_speed_setting(self, linear = 0.0, angular = 0.0):
         self.vel_cmd.linear.x  = linear 
-        self.vel_cmd.angular.z = angular 
+        self.vel_cmd.angular.z = angular * -1
 
 
     #Function for data publishing
@@ -162,11 +162,11 @@ class colour_search(object):
 
     def state_cal(self, r):
         forward  = r[0]
-        left  = r[90]
-        right  = r[-90]
+        left  = r[-90]
+        right  = r[90]
         backward  = r[180]
-        front_right = r[-55]
-        front_left = r[55]
+        front_right = r[55]
+        front_left = r[-55]
 
         alpha           = 0.4
         side_threshold  = 0.7
@@ -221,7 +221,7 @@ class colour_search(object):
             print(e)
         
         height, width, _ = cv_img.shape
-        crop_width = width
+        crop_width = 1000
         crop_height = 50
         crop_x = int((width/2) - (crop_width/2))
         crop_y = int((height/2) - (crop_height/2))
@@ -230,6 +230,15 @@ class colour_search(object):
         crop_img = cv_img[crop_y:crop_y+crop_height, crop_x:crop_x+crop_width]
         hsv_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
 
+        if (self.target_colour == "Red"):
+            mask = cv2.inRange(hsv_img, self.lower[1], self.upper[1])
+            m = cv2.moments(mask)
+        
+            self.m00 = m["m00"]
+        
+            self.cy = m["m10"] / (m["m00"] + 1e-5)
+
+        """
         # create a single mask to accommodate all four dectection colours:
         for i in range(6):
             if i == 0:
@@ -242,6 +251,7 @@ class colour_search(object):
         self.m00 = m["m00"]
         
         self.cy = m["m10"] / (m["m00"] + 1e-5)
+        """
 
         cv2.imshow("cropped image", crop_img)
         
@@ -264,7 +274,9 @@ class colour_search(object):
         for i in range(6):
             if(self.lower[i][0]<=hsv_img[25][25][0] and self.upper[i][0]>=hsv_img[25][25][0] and self.lower[i][1]<=hsv_img[25][25][1] and self.upper[i][1]>=hsv_img[25][25][1] and self.target_colour != "" and (self.lasttime.secs - self.lasttimeran >= 10)):
                 print(self.colours[i])
-                if (self.target_colour == (self.colours[i]) and self.cy >= 80 and self.cy <= 120):
+                print(self.cy)
+                #if (self.target_colour == (self.colours[i]) and self.cy >= 80 and self.cy <= 120):
+                if (self.target_colour == (self.colours[i])):
                     print("Found beacon")
                     self.vel_cmd.linear.x = 0
                     self.vel_cmd.angular.z = 0
@@ -301,10 +313,10 @@ class colour_search(object):
                     self.vel_cmd.angular.z = 0
                 elif (self.cy<80 or self.distance_to_RightWall(self.ranges) <= 0.4):
                     print("Turning left")
-                    self.vel_cmd.angular.z = 0.4
+                    self.vel_cmd.angular.z = 0.8
                 elif (self.distance_to_LeftWall(self.ranges) <= 0.4 or self.cy>100):
                     print("Turning right")
-                    self.vel_cmd.angular.z = -0.4
+                    self.vel_cmd.angular.z = -0.8
 
                 if (self.distance_to_Beacon(self.ranges)<0.45):
                 # blob detected
@@ -318,41 +330,43 @@ class colour_search(object):
                     self.vel_cmd.linear.x = 0.3
                 elif self.move_rate == "slow":
                     print("Slow")
-                    self.vel_cmd.linear.x = 0.2
+                    self.vel_cmd.linear.x = 0
                 elif self.move_rate == "stop":    
                     print("Stop")                
                     self.vel_cmd.linear.x = 0.2
                 else:
                     self.vel_cmd.linear.x = 0.2
-                self.pub.publish(self.vel_cmd)
+                self.publish()
                 
             
             else:
                 state = self.state_cal(self.ranges)
-                if (state == State.SW):
-                    front_right = self.ranges[-55]
-                    e  = 0.4 - front_right
-                    kp = 3
-                    self.move_speed_setting(0.25, kp *e)
-                elif (state == State.RT):
-                    self.move_speed_setting(0.25, -0.9)
+            if (np.amin(np.append(self.ranges[0:30], self.ranges[330:360])) <= 0.4 and (self.ranges[55] >= 0.4 or self.ranges[-55] >= 0.4)):
+                self.move_speed_setting(0, 1)
+            elif (state == State.SW):
+                front_right = self.ranges[55]
+                e  = 0.4 - front_right
+                kp = 3
+                self.move_speed_setting(0.25, kp *e)
+            elif (state == State.RT):
+                self.move_speed_setting(0.25, -0.9)
 
-                elif (state == State.LT):
-                    self.move_speed_setting(0.25, 1.5)
+            elif (state == State.LT):
+                self.move_speed_setting(0.25, 1.5)
 
-                elif (state == State.END):
-                    self.move_speed_setting(0,1.5)
-                elif (state == State.RT or state == State.RT):
-                    self.move_speed_setting(0.25, -0.9)
+            elif (state == State.END):
+                self.move_speed_setting(0,1.5)
+            elif (state == State.RT or state == State.RT):
+                self.move_speed_setting(0.25, -0.9)
 
-                elif (state == State.LT or state == State.LT):
-                    self.move_speed_setting(0.25, 1.5)
+            elif (state == State.LT or state == State.LT):
+                self.move_speed_setting(0.25, 1.5)
 
-                elif (state == State.END):
-                    self.move_speed_setting(0, 1.5)
+            elif (state == State.END):
+                self.move_speed_setting(0, 1.5)
 
-                else:
-                    self.move_speed_setting(0, 0)
+            else:
+                self.move_speed_setting(0, 0)
 
             self.publish()
             self.rate.sleep()
