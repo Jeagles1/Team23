@@ -284,7 +284,7 @@ class colour_search(object):
         self.cy = m["m10"] / (m["m00"] + 1e-5)
         """
 
-        cv2.imshow("cropped image", crop_img)
+        # cv2.imshow("cropped image", crop_img)
         
         hsv_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
         self.lasttime = rospy.get_rostime() 
