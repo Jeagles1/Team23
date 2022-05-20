@@ -222,13 +222,14 @@ class colour_search(object):
         self.theta_z = yaw 
 
 
-
-        if (self.startup):
-            self.start_yaw = self.yaw
-            self.startup = False
-            self.theta_z0 = self.theta_z
-            
-            self.lasttimeran = self.lasttime.secs
+        try:
+            if (self.startup):
+                self.start_yaw = self.yaw
+                self.startup = False
+                self.theta_z0 = self.theta_z
+                self.lasttimeran = self.lasttime.secs
+        except AttributeError:
+            pass
     
     def mask_colour(self, hsv_img, col):
         mask = cv2.inRange(hsv_img, self.lower[col], self.upper[col])
@@ -296,10 +297,8 @@ class colour_search(object):
             if(self.lower[i][0]<=hsv_img[25][middle][0] and self.upper[i][0]>=hsv_img[25][middle][0] and self.lower[i][1]<=hsv_img[25][middle][1] and self.upper[i][1]>=hsv_img[25][middle][1] and self.target_colour == "" and (self.lasttime.secs - self.lasttimeran >= 6)):
                 self.target_colour = (self.colours[i])
                 
-                print("Target colour is:" + self.target_colour)
+                print("SEARCH INITIATED: The target beacon colour is " + self.target_colour + ".")
                 # Thresholds for ["Blue", "Red", "Green", "Turquoise", "Purple","Yellow"]
-                self.target_colour = "Red"
-                print("Target colour is:" + self.target_colour)
 
         """
         for i in range(6):
@@ -316,7 +315,7 @@ class colour_search(object):
         """
 
         if (self.target_colour != "" and (self.lasttime.secs - self.lasttimeran >= 10) and self.cy > 0 and self.cy < 800 and self.state != State.BEACON and self.state != State.FINDCOLOUR):
-            print("Found beacon")
+            print("TARGET DETECTED: Beaconing initiated.")
             self.vel_cmd.linear.x = 0
             self.vel_cmd.angular.z = 0
             self.pub.publish(self.vel_cmd)
