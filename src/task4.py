@@ -33,9 +33,12 @@ class State(Enum):
     SW = 5
     BEACON = 6
     FINDCOLOUR = 7
-    END = 8
-    ZE = 9
-    RM = 10
+    TURNRIGHT = 8
+    TURNLEFT = 9
+    MOVEFORWARD = 10
+    END = 11
+    ZE = 12
+    RM = 13
 
 
 class colour_search(object):
@@ -79,10 +82,12 @@ class colour_search(object):
         self.targetturn = 0
         self.targetdirection = 0
 
+        self.turns = 0
+
         self.lasttime = rospy.get_rostime()
         self.lasttimeran = 0
 
-        self.rate            = rospy.Rate(10)
+        self.rate            = rospy.Rate(20)
         self.scan_subscriber = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
 
         self.camera_subscriber = rospy.Subscriber("/camera/rgb/image_raw",
@@ -214,6 +219,16 @@ class colour_search(object):
         self.yaw  = self.round(degrees(yaw), 4)
         self.posx = self.round(position.x, 4)
         self.posy = self.round(position.y, 4)
+        self.theta_z = yaw 
+
+
+
+        if (self.startup):
+            self.start_yaw = self.yaw
+            self.startup = False
+            self.theta_z0 = self.theta_z
+            
+            self.lasttimeran = self.lasttime.secs
     
     def mask_colour(self, hsv_img, col):
         mask = cv2.inRange(hsv_img, self.lower[col], self.upper[col])
@@ -272,8 +287,7 @@ class colour_search(object):
         
         hsv_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
         self.lasttime = rospy.get_rostime() 
-        if (self.lasttimeran == 0):
-                self.lasttimeran = self.lasttime.secs
+       
                 
         
         middle = math.floor(c_width / 2)
@@ -281,7 +295,7 @@ class colour_search(object):
         for i in range(6):
             if(self.lower[i][0]<=hsv_img[25][middle][0] and self.upper[i][0]>=hsv_img[25][middle][0] and self.lower[i][1]<=hsv_img[25][middle][1] and self.upper[i][1]>=hsv_img[25][middle][1] and self.target_colour == "" and (self.lasttime.secs - self.lasttimeran >= 6)):
                 self.target_colour = (self.colours[i])
-                self.state = State.RM
+                
                 print("Target colour is:" + self.target_colour)
                 # Thresholds for ["Blue", "Red", "Green", "Turquoise", "Purple","Yellow"]
                 self.target_colour = "Red"
@@ -301,7 +315,7 @@ class colour_search(object):
                     self.state = State.BEACON
         """
 
-        if (self.target_colour != "" and (self.lasttime.secs - self.lasttimeran >= 10) and self.cy > 0 and self.cy < 1100):
+        if (self.target_colour != "" and (self.lasttime.secs - self.lasttimeran >= 10) and self.cy > 0 and self.cy < 800 and self.state != State.BEACON and self.state != State.FINDCOLOUR):
             print("Found beacon")
             self.vel_cmd.linear.x = 0
             self.vel_cmd.angular.z = 0
@@ -318,17 +332,64 @@ class colour_search(object):
 
     def main(self):
         self.lasttime = rospy.get_rostime()
+       
         
         while not self.ctrl_c and not (self.ranges) :
             self.rate.sleep()        
         while not self.ctrl_c and (self.state == State.FINDCOLOUR):    
             self.rate.sleep()
 
-            self.vel_cmd.angular.z = 0.5
-            self.pub.publish(self.vel_cmd)
+            
+            if (self.yaw >= self.start_yaw -10 and self.yaw <= self.start_yaw + 10  and self.lasttime.secs - self.lasttimeran >= 5 and self.state == State.FINDCOLOUR):
+                self.vel_cmd.angular.z = 0
+                self.vel_cmd.linear.x = 0.1
+                if (self.ranges[0]) >= 2:
+                    self.state = State.MOVEFORWARD
+                else:
+                    self.state = State.RM
+                
+            else:
+                self.vel_cmd.angular.z = 0.5
+
+            
+            
+
 
         
-                 
+            self.pub.publish(self.vel_cmd)
+
+        while (not self.ctrl_c and self.state == State.MOVEFORWARD):
+            
+            self.vel_cmd.linear.x = 0.1
+            if(np.amax(np.append(self.ranges[135],self.ranges[225])) >= 0.6):
+                self.vel_cmd.linear.x = 0
+                self.theta_z0 = self.theta_z
+                self.state = State.TURNRIGHT
+            self.pub.publish(self.vel_cmd)
+
+        while (not self.ctrl_c and self.state == State.TURNRIGHT):
+            
+            self.vel_cmd.linear.x = 0
+            
+            if ((abs(self.theta_z0 - self.theta_z) <= 4.3) and abs(self.theta_z0 - self.theta_z) >= 4):
+                
+                self.state = State.TURNLEFT
+            else:
+                self.vel_cmd.angular.z = -0.3
+
+            self.pub.publish(self.vel_cmd)
+
+        while (not self.ctrl_c and self.state == State.TURNLEFT):
+            
+            if abs(self.theta_z0 - self.theta_z) <= 0.2:
+                            
+                self.state = State.RM
+            else:
+               
+                self.vel_cmd.angular.z = 0.3
+
+            self.pub.publish(self.vel_cmd)
+
         
         while not self.ctrl_c and (self.state != State.FINDCOLOUR) and self.move_rate != "stop":
             if (self.state == State.BEACON):
@@ -336,18 +397,45 @@ class colour_search(object):
                 if (self.cy >= c_width * (9/20) and self.cy <= c_width * (11/20)):
                     self.vel_cmd.angular.z = 0
                     self.move_rate = "fast"
-                elif (self.cy == 0):
-                    self.vel_cmd.angular.z = 0
-                elif (self.cy< c_width * (9/20)):
-                    print("Turning left")
-                    self.vel_cmd.angular.z = 0.3
-                elif (self.cy>c_width * (11/20)):
-                    print("Turning right")
+                    self.turns = 0
+                elif (self.ranges[55] <= 0.3):
+                    
+                    self.turns = 1
                     self.vel_cmd.angular.z = -0.3
+                elif (self.ranges[305] <= 0.3):
+                   
+                    self.turns = -1
+                    self.vel_cmd.angular.z = 0.3
+                elif (self.cy< c_width * (9/20) and self.cy > 0):
+                    
+                    self.vel_cmd.angular.z = 0.2
+                elif (self.cy>c_width * (11/20)):
+                    
+                    self.vel_cmd.angular.z = -0.2
+                elif (self.turns != 0):
+                    self.vel_cmd.linear.x = 0.1
+                    self.vel_cmd.angular.z = self.turns * 0.5
+                else:
+                    self.vel_cmd.linear.x = 0
+                    self.vel_cmd.angular.z = 0.2
+                """
+                elif (self.cy < 1 and self.turns != 0):
+                    if (self.turns > 0):
+                        print("Turns Left")
+                        self.vel_cmd.angular.z = 0.2
+                        self.turns -= 1
+                    else:
+                        print("Turns Right")
+                        self.vel_cmd.angular.z = 0.2
+                        self.turns += 1
+                
+                """
+                
 
                 if (self.distance_to_Beacon(self.ranges)<0.375):
                 #if (np.amin(np.append(self.ranges[0:30],self.ranges[330:360])) <= 0.375):
                     # blob detected
+                    print("BEACONING COMPLETE: The robot has now stopped.")
                     self.move_rate = "stop"
                         
                     
@@ -357,10 +445,8 @@ class colour_search(object):
                 if self.move_rate == "fast":
                     self.vel_cmd.linear.x = 0.4
                 elif self.move_rate == "slow":
-                    print("Slow")
-                    self.vel_cmd.linear.x = 0.25
-                elif self.move_rate == "stop":    
-                    print("Stop")                
+                    self.vel_cmd.linear.x = 0.2
+                elif self.move_rate == "stop":                  
                     self.vel_cmd.linear.x = 0.2
                 else:
                     self.vel_cmd.linear.x = 0.2
@@ -375,7 +461,10 @@ class colour_search(object):
                     front_right = self.ranges[55]
                     e  = 0.4 - front_right
                     kp = 3
-                    self.move_speed_setting(0.25, kp *e)
+                    if (self.ranges[0] <= 1):
+                        self.move_speed_setting(0.25, kp *e)
+                    else:
+                        self.move_speed_setting(0.35, kp *e)
                 elif (state == State.RT):
                     self.move_speed_setting(0.25, -0.9)
 
