@@ -41,7 +41,7 @@ class State(Enum):
     RM = 13
 
 
-class colour_search(object):
+class task4(object):
 
     ranges = None
 
@@ -491,7 +491,7 @@ class colour_search(object):
             
             
 if __name__ == "__main__":
-    search_instance = colour_search()
+    search_instance = task4()
     try:
         search_instance.main()
     except rospy.ROSInterruptException:
