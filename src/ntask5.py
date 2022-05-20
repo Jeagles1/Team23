@@ -21,6 +21,8 @@ executable = 'map_saver'
 node = roslaunch.core.Node(package, executable)
 node.args = '-f task5_map'
 
+parent = os.path.split(os.path.split(__file__)[0])[0]
+
 from sensor_msgs.msg import LaserScan
 
 import cv2
@@ -64,7 +66,7 @@ class task5():
         
         self.args = cli.parse_args(rospy.myargv()[1:])
         print(self.args)
-        self.camera_subscriber = rospy.Subscriber("/camera/rgb/image_raw",
+        self.camera_subscriber = rospy.Subscriber("/camera/color/image_raw",
             Image, self.camera_callback)
         self.cvbridge_interface = CvBridge()
         self.m00 = 0
@@ -206,16 +208,7 @@ class task5():
         while not (self.ranges):
             self.rate.sleep()
         while True:
-            print("----------------------------------------------------------------------------------------------")
-            print(__file__)
-            print("parent = " + os.path.abspath(os.path.join(__file__, "..")))
-            #map_path = Path("/home/student/Team23/maps/task5_map")
-            #map_path.mkdir(parents=True, exist_ok=True)
-            #map_path = "Team23/maps/task5_map"
-            #map_path = os.path.join(os.path.abspath(os.path.join(__file__, "..")), "maps/task5_map")
-            map_path = "/home/student/catkin_ws/src/Team23/maps/task5_map"
-            #map_path = "/../maps/task5_map"
-            print(map_path)
+            map_path = parent + "/maps/task5_map"
 
             launch = roslaunch.scriptapi.ROSLaunch()
             launch.start()
@@ -238,7 +231,6 @@ class task5():
             r = r[r != 0]
             minright = np.amin(r)
             minsides = np.amin(np.append(l,r))
-            print(minleft - minright)
             front_left = np.amin(np.array(self.ranges[35:45]))
             front_right = np.amin(np.array(self.ranges[315:325]))
             mid_left = np.amin(np.array(self.ranges[45:55]))
